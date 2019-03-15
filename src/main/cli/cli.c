@@ -446,102 +446,110 @@ static void getMinMax(const clivalue_t *var, int *min, int *max)
 
 static void printValuePointer(const clivalue_t *var, const void *valuePointer, bool full)
 {
-    if ((var->type & VALUE_MODE_MASK) == MODE_ARRAY) {
-        for (int i = 0; i < var->config.array.length; i++) {
+    switch((var->type & VALUE_MODE_MASK)) {
+    case MODE_ARRAY: {
+            for (int i = 0; i < var->config.array.length; i++) {
+                switch (var->type & VALUE_TYPE_MASK) {
+                default:
+                case VAR_UINT8:
+                    // uint8_t array
+                    cliPrintf("%d", ((uint8_t *)valuePointer)[i]);
+                    break;
+
+                case VAR_INT8:
+                    // int8_t array
+                    cliPrintf("%d", ((int8_t *)valuePointer)[i]);
+                    break;
+
+                case VAR_UINT16:
+                    // uin16_t array
+                    cliPrintf("%d", ((uint16_t *)valuePointer)[i]);
+                    break;
+
+                case VAR_INT16:
+                    // int16_t array
+                    cliPrintf("%d", ((int16_t *)valuePointer)[i]);
+                    break;
+                }
+
+                if (i < var->config.array.length - 1) {
+                    cliPrint(",");
+                }
+            }
+        }
+        break;
+    case MODE_STRING: {
+            cliPrintf("%s", ((char *)valuePointer));
+        }
+        break;
+    default: {
+            int value = 0;
+
             switch (var->type & VALUE_TYPE_MASK) {
-            default:
             case VAR_UINT8:
-                // uint8_t array
-                cliPrintf("%d", ((uint8_t *)valuePointer)[i]);
-                break;
+                value = *(uint8_t *)valuePointer;
 
+                break;
             case VAR_INT8:
-                // int8_t array
-                cliPrintf("%d", ((int8_t *)valuePointer)[i]);
-                break;
+                value = *(int8_t *)valuePointer;
 
+                break;
             case VAR_UINT16:
-                // uin16_t array
-                cliPrintf("%d", ((uint16_t *)valuePointer)[i]);
-                break;
+                value = *(uint16_t *)valuePointer;
 
+                break;
             case VAR_INT16:
-                // int16_t array
-                cliPrintf("%d", ((int16_t *)valuePointer)[i]);
+                value = *(int16_t *)valuePointer;
+
+                break;
+            case VAR_UINT32:
+                value = *(uint32_t *)valuePointer;
+
                 break;
             }
 
-            if (i < var->config.array.length - 1) {
-                cliPrint(",");
-            }
-        }
-    } else {
-        int value = 0;
+            bool valueIsCorrupted = false;
+            switch (var->type & VALUE_MODE_MASK) {
+            case MODE_DIRECT:
+                if ((var->type & VALUE_TYPE_MASK) == VAR_UINT32) {
+                    cliPrintf("%d", value);
+                    if ((uint32_t) value > var->config.u32Max) {
+                        valueIsCorrupted = true;
+                    } else if (full) {
+                        cliPrintf(" 0 %d", var->config.u32Max);
+                    }
+                } else {
+                    int min;
+                    int max;
+                    getMinMax(var, &min, &max);
 
-        switch (var->type & VALUE_TYPE_MASK) {
-        case VAR_UINT8:
-            value = *(uint8_t *)valuePointer;
-
-            break;
-        case VAR_INT8:
-            value = *(int8_t *)valuePointer;
-
-            break;
-        case VAR_UINT16:
-            value = *(uint16_t *)valuePointer;
-
-            break;
-        case VAR_INT16:
-            value = *(int16_t *)valuePointer;
-
-            break;
-        case VAR_UINT32:
-            value = *(uint32_t *)valuePointer;
-
-            break;
-        }
-
-        bool valueIsCorrupted = false;
-        switch (var->type & VALUE_MODE_MASK) {
-        case MODE_DIRECT:
-            if ((var->type & VALUE_TYPE_MASK) == VAR_UINT32) {
-                cliPrintf("%d", value);
-                if ((uint32_t) value > var->config.u32Max) {
-                    valueIsCorrupted = true;
-                } else if (full) {
-                    cliPrintf(" 0 %d", var->config.u32Max);
+                    cliPrintf("%d", value);
+                    if ((value < min) || (value > max)) {
+                        valueIsCorrupted = true;
+                    } else if (full) {
+                        cliPrintf(" %d %d", min, max);
+                    }
                 }
-            } else {
-                int min;
-                int max;
-                getMinMax(var, &min, &max);
-
-                cliPrintf("%d", value);
-                if ((value < min) || (value > max)) {
+                break;
+            case MODE_LOOKUP:
+                if (value < lookupTables[var->config.lookup.tableIndex].valueCount) {
+                    cliPrint(lookupTables[var->config.lookup.tableIndex].values[value]);
+                } else {
                     valueIsCorrupted = true;
-                } else if (full) {
-                    cliPrintf(" %d %d", min, max);
+                }
+                break;
+            case MODE_BITSET:
+                if (value & 1 << var->config.bitpos) {
+                    cliPrintf("ON");
+                } else {
+                    cliPrintf("OFF");
                 }
             }
-            break;
-        case MODE_LOOKUP:
-            if (value < lookupTables[var->config.lookup.tableIndex].valueCount) {
-                cliPrint(lookupTables[var->config.lookup.tableIndex].values[value]);
-            } else {
-                valueIsCorrupted = true;
-            }
-            break;
-        case MODE_BITSET:
-            if (value & 1 << var->config.bitpos) {
-                cliPrintf("ON");
-            } else {
-                cliPrintf("OFF");
-            }
-        }
 
-        if (valueIsCorrupted) {
-            cliPrintLinefeed();
-            cliPrintError("CORRUPTED CONFIG: %s = %d", var->name, value);
+            if (valueIsCorrupted) {
+                cliPrintLinefeed();
+                cliPrintError("CORRUPTED CONFIG: %s = %d", var->name, value);
+            }
         }
     }
 }
@@ -724,60 +732,68 @@ static void cliSetVar(const clivalue_t *var, const uint32_t value)
     uint32_t workValue;
     uint32_t mask;
 
-    if ((var->type & VALUE_MODE_MASK) == MODE_BITSET) {
-        switch (var->type & VALUE_TYPE_MASK) {
-        case VAR_UINT8:
-            mask = (1 << var->config.bitpos) & 0xff;
-            if (value) {
-                workValue = *(uint8_t *)ptr | mask;
-            } else {
-                workValue = *(uint8_t *)ptr & ~mask;
-            }
-            *(uint8_t *)ptr = workValue;
-            break;
+    switch (var->type & VALUE_MODE_MASK) {
+    case MODE_BITSET: {
+            switch (var->type & VALUE_TYPE_MASK) {
+            case VAR_UINT8:
+                mask = (1 << var->config.bitpos) & 0xff;
+                if (value) {
+                    workValue = *(uint8_t *)ptr | mask;
+                } else {
+                    workValue = *(uint8_t *)ptr & ~mask;
+                }
+                *(uint8_t *)ptr = workValue;
+                break;
 
-        case VAR_UINT16:
-            mask = (1 << var->config.bitpos) & 0xffff;
-            if (value) {
-                workValue = *(uint16_t *)ptr | mask;
-            } else {
-                workValue = *(uint16_t *)ptr & ~mask;
-            }
-            *(uint16_t *)ptr = workValue;
-            break;
+            case VAR_UINT16:
+                mask = (1 << var->config.bitpos) & 0xffff;
+                if (value) {
+                    workValue = *(uint16_t *)ptr | mask;
+                } else {
+                    workValue = *(uint16_t *)ptr & ~mask;
+                }
+                *(uint16_t *)ptr = workValue;
+                break;
 
-        case VAR_UINT32:
-            mask = 1 << var->config.bitpos;
-            if (value) {
-                workValue = *(uint32_t *)ptr | mask;
-            } else {
-                workValue = *(uint32_t *)ptr & ~mask;
-            }
-            *(uint32_t *)ptr = workValue;
-            break;
+            case VAR_UINT32:
+                mask = 1 << var->config.bitpos;
+                if (value) {
+                    workValue = *(uint32_t *)ptr | mask;
+                } else {
+                    workValue = *(uint32_t *)ptr & ~mask;
+                }
+                *(uint32_t *)ptr = workValue;
+                break;
 
+            }
         }
-    } else {
-        switch (var->type & VALUE_TYPE_MASK) {
-        case VAR_UINT8:
-            *(uint8_t *)ptr = value;
-            break;
+        break;
+    case MODE_STRING: {
+            cliPrintf("%s", ptr);
+        }
+        break;
+    default: {
+            switch (var->type & VALUE_TYPE_MASK) {
+            case VAR_UINT8:
+                *(uint8_t *)ptr = value;
+                break;
 
-        case VAR_INT8:
-            *(int8_t *)ptr = value;
-            break;
+            case VAR_INT8:
+                *(int8_t *)ptr = value;
+                break;
 
-        case VAR_UINT16:
-            *(uint16_t *)ptr = value;
-            break;
+            case VAR_UINT16:
+                *(uint16_t *)ptr = value;
+                break;
 
-        case VAR_INT16:
-            *(int16_t *)ptr = value;
-            break;
+            case VAR_INT16:
+                *(int16_t *)ptr = value;
+                break;
 
-        case VAR_UINT32:
-            *(uint32_t *)ptr = value;
-            break;
+            case VAR_UINT32:
+                *(uint32_t *)ptr = value;
+                break;
+            }
         }
     }
 }
@@ -2722,32 +2738,6 @@ static void cliVtxTable(char *cmdline)
 }
 #endif // USE_VTX_TABLE
 
-#ifdef USE_OSD
-static void printDisplayName(dumpFlags_t dumpMask, const pilotConfig_t *pilotConfig)
-{
-    const bool equalsDefault = strlen(pilotConfig->displayName) == 0;
-    cliDumpPrintLinef(dumpMask, equalsDefault, "display_name %s", equalsDefault ? emptyName : pilotConfig->displayName);
-}
-
-static void cliDisplayName(char *cmdline)
-{
-    const unsigned int len = strlen(cmdline);
-    if (len > 0) {
-        memset(pilotConfigMutable()->displayName, 0, ARRAYLEN(pilotConfig()->displayName));
-        if (strncmp(cmdline, emptyName, len)) {
-            strncpy(pilotConfigMutable()->displayName, cmdline, MIN(len, MAX_NAME_LENGTH));
-        }
-    }
-    printDisplayName(DUMP_MASTER, pilotConfig());
-}
-#endif
-
-static void printName(dumpFlags_t dumpMask, const pilotConfig_t *pilotConfig)
-{
-    const bool equalsDefault = strlen(pilotConfig->name) == 0;
-    cliDumpPrintLinef(dumpMask, equalsDefault, "name %s", equalsDefault ? emptyName : pilotConfig->name);
-}
-
 static void cliName(char *cmdline)
 {
     const unsigned int len = strlen(cmdline);
@@ -2757,7 +2747,6 @@ static void cliName(char *cmdline)
             strncpy(pilotConfigMutable()->name, cmdline, MIN(len, MAX_NAME_LENGTH));
         }
     }
-    printName(DUMP_MASTER, pilotConfig());
 }
 
 #if defined(USE_BOARD_INFO)
@@ -3951,6 +3940,19 @@ static uint8_t getWordLength(char *bufBegin, char *bufEnd)
     return bufEnd - bufBegin;
 }
 
+uint16_t cliGetSettingIndex(char *name, uint8_t length) 
+{
+    for (uint32_t i = 0; i < valueTableEntryCount; i++) {
+        const char *settingName = valueTable[i].name;
+
+        // ensure exact match when setting to prevent setting variables with shorter names
+        if (strncasecmp(name, settingName, strlen(settingName)) == 0 && length == strlen(settingName)) {
+            return i;
+        }
+    }
+    return valueTableEntryCount;
+} 
+
 STATIC_UNIT_TESTED void cliSet(char *cmdline)
 {
     const uint32_t len = strlen(cmdline);
@@ -3974,140 +3976,156 @@ STATIC_UNIT_TESTED void cliSet(char *cmdline)
         eqptr++;
         eqptr = skipSpace(eqptr);
 
-        for (uint32_t i = 0; i < valueTableEntryCount; i++) {
-            const clivalue_t *val = &valueTable[i];
-
-            // ensure exact match when setting to prevent setting variables with shorter names
-            if (strncasecmp(cmdline, val->name, strlen(val->name)) == 0 && variableNameLength == strlen(val->name)) {
-
-                bool valueChanged = false;
-                int16_t value  = 0;
-                switch (val->type & VALUE_MODE_MASK) {
-                case MODE_DIRECT: {
-                        if ((val->type & VALUE_TYPE_MASK) == VAR_UINT32) {
-                            uint32_t value = strtol(eqptr, NULL, 10);
-
-                            if (value <= val->config.u32Max) {
-                                cliSetVar(val, value);
-                                valueChanged = true;
-                            }
-                        } else {
-                            int value = atoi(eqptr);
-
-                            int min;
-                            int max;
-                            getMinMax(val, &min, &max);
-
-                            if (value >= min && value <= max) {
-                                cliSetVar(val, value);
-                                valueChanged = true;
-                            }
-                        }
-                    }
-
-                    break;
-                case MODE_LOOKUP: 
-                case MODE_BITSET: {
-                        int tableIndex;
-                        if ((val->type & VALUE_MODE_MASK) == MODE_BITSET) {
-                            tableIndex = TABLE_OFF_ON;
-                        } else {
-                            tableIndex = val->config.lookup.tableIndex;
-                        }
-                        const lookupTableEntry_t *tableEntry = &lookupTables[tableIndex];
-                        bool matched = false;
-                        for (uint32_t tableValueIndex = 0; tableValueIndex < tableEntry->valueCount && !matched; tableValueIndex++) {
-                            matched = tableEntry->values[tableValueIndex] && strcasecmp(tableEntry->values[tableValueIndex], eqptr) == 0;
-
-                            if (matched) {
-                                value = tableValueIndex;
-
-                                cliSetVar(val, value);
-                                valueChanged = true;
-                            }
-                        }
-                    }
-
-                    break;
-
-                case MODE_ARRAY: {
-                        const uint8_t arrayLength = val->config.array.length;
-                        char *valPtr = eqptr;
-
-                        int i = 0;
-                        while (i < arrayLength && valPtr != NULL) {
-                            // skip spaces
-                            valPtr = skipSpace(valPtr);
-
-                            // process substring starting at valPtr
-                            // note: no need to copy substrings for atoi()
-                            //       it stops at the first character that cannot be converted...
-                            switch (val->type & VALUE_TYPE_MASK) {
-                            default:
-                            case VAR_UINT8:
-                                {
-                                    // fetch data pointer
-                                    uint8_t *data = (uint8_t *)cliGetValuePointer(val) + i;
-                                    // store value
-                                    *data = (uint8_t)atoi((const char*) valPtr);
-                                }
-
-                                break;
-                            case VAR_INT8:
-                                {
-                                    // fetch data pointer
-                                    int8_t *data = (int8_t *)cliGetValuePointer(val) + i;
-                                    // store value
-                                    *data = (int8_t)atoi((const char*) valPtr);
-                                }
-
-                                break;
-                            case VAR_UINT16:
-                                {
-                                    // fetch data pointer
-                                    uint16_t *data = (uint16_t *)cliGetValuePointer(val) + i;
-                                    // store value
-                                    *data = (uint16_t)atoi((const char*) valPtr);
-                                }
-
-                                break;
-                            case VAR_INT16:
-                                {
-                                    // fetch data pointer
-                                    int16_t *data = (int16_t *)cliGetValuePointer(val) + i;
-                                    // store value
-                                    *data = (int16_t)atoi((const char*) valPtr);
-                                }
-
-                                break;
-                            }
-
-                            // find next comma (or end of string)
-                            valPtr = strchr(valPtr, ',') + 1;
-
-                            i++;
-                        }
-                    }
-
-                    // mark as changed
-                    valueChanged = true;
-
-                    break;
-
-                }
-
-                if (valueChanged) {
-                    cliPrintf("%s set to ", val->name);
-                    cliPrintVar(val, 0);
-                } else {
-                    cliPrintErrorLinef("INVALID VALUE");
-                    cliPrintVarRange(val);
-                }
-
-                return;
-            }
+        const uint16_t index = cliGetSettingIndex(cmdline, variableNameLength);
+        if (index >= valueTableEntryCount) {
+            cliPrintErrorLinef("INVALID NAME");
+            return;
         }
-        cliPrintErrorLinef("INVALID NAME");
+
+        const clivalue_t *val = &valueTable[index];
+
+        bool valueChanged = false;
+        int16_t value  = 0;
+        switch (val->type & VALUE_MODE_MASK) {
+        case MODE_DIRECT: {
+                if ((val->type & VALUE_TYPE_MASK) == VAR_UINT32) {
+                    uint32_t value = strtol(eqptr, NULL, 10);
+
+                    if (value <= val->config.u32Max) {
+                        cliSetVar(val, value);
+                        valueChanged = true;
+                    }
+                } else {
+                    int value = atoi(eqptr);
+
+                    int min;
+                    int max;
+                    getMinMax(val, &min, &max);
+
+                    if (value >= min && value <= max) {
+                        cliSetVar(val, value);
+                        valueChanged = true;
+                    }
+                }
+            }
+
+            break;
+        case MODE_LOOKUP: 
+        case MODE_BITSET: {
+                int tableIndex;
+                if ((val->type & VALUE_MODE_MASK) == MODE_BITSET) {
+                    tableIndex = TABLE_OFF_ON;
+                } else {
+                    tableIndex = val->config.lookup.tableIndex;
+                }
+                const lookupTableEntry_t *tableEntry = &lookupTables[tableIndex];
+                bool matched = false;
+                for (uint32_t tableValueIndex = 0; tableValueIndex < tableEntry->valueCount && !matched; tableValueIndex++) {
+                    matched = tableEntry->values[tableValueIndex] && strcasecmp(tableEntry->values[tableValueIndex], eqptr) == 0;
+
+                    if (matched) {
+                        value = tableValueIndex;
+
+                        cliSetVar(val, value);
+                        valueChanged = true;
+                    }
+                }
+            }
+
+            break;
+
+        case MODE_ARRAY: {
+                const uint8_t arrayLength = val->config.array.length;
+                char *valPtr = eqptr;
+
+                int i = 0;
+                while (i < arrayLength && valPtr != NULL) {
+                    // skip spaces
+                    valPtr = skipSpace(valPtr);
+
+                    // process substring starting at valPtr
+                    // note: no need to copy substrings for atoi()
+                    //       it stops at the first character that cannot be converted...
+                    switch (val->type & VALUE_TYPE_MASK) {
+                    default:
+                    case VAR_UINT8:
+                        {
+                            // fetch data pointer
+                            uint8_t *data = (uint8_t *)cliGetValuePointer(val) + i;
+                            // store value
+                            *data = (uint8_t)atoi((const char*) valPtr);
+                        }
+
+                        break;
+                    case VAR_INT8:
+                        {
+                            // fetch data pointer
+                            int8_t *data = (int8_t *)cliGetValuePointer(val) + i;
+                            // store value
+                            *data = (int8_t)atoi((const char*) valPtr);
+                        }
+
+                        break;
+                    case VAR_UINT16:
+                        {
+                            // fetch data pointer
+                            uint16_t *data = (uint16_t *)cliGetValuePointer(val) + i;
+                            // store value
+                            *data = (uint16_t)atoi((const char*) valPtr);
+                        }
+
+                        break;
+                    case VAR_INT16:
+                        {
+                            // fetch data pointer
+                            int16_t *data = (int16_t *)cliGetValuePointer(val) + i;
+                            // store value
+                            *data = (int16_t)atoi((const char*) valPtr);
+                        }
+
+                        break;
+                    }
+
+                    // find next comma (or end of string)
+                    valPtr = strchr(valPtr, ',') + 1;
+
+                    i++;
+                }
+            }
+
+            // mark as changed
+            valueChanged = true;
+
+            break;
+        case MODE_STRING: {
+                char *valPtr = eqptr;
+                valPtr = skipSpace(valPtr);
+
+                const unsigned int len = strlen(valPtr);
+                const uint8_t min = val->config.string.minlength;
+                const uint8_t max = val->config.string.maxlength;
+                const bool updatable = ((val->config.string.flags & STRING_FLAGS_WRITEONCE) == 0 || 
+                                        strlen((char *)cliGetValuePointer(val)) == 0 || 
+                                        strncmp(valPtr, (char *)cliGetValuePointer(val), len) == 0);
+
+                if (updatable && len > 0 && len <= max) {
+                    memset((char *)cliGetValuePointer(val), 0, max);
+                    if (len >= min && strncmp(valPtr, emptyName, len)) {
+                        strncpy((char *)cliGetValuePointer(val), valPtr, len);
+                    }
+                    valueChanged = true;
+                }
+            }
+            break;
+        }
+
+        if (valueChanged) {
+            cliPrintf("%s set to ", val->name);
+            cliPrintVar(val, 0);
+        } else {
+            cliPrintErrorLinef("INVALID VALUE");
+            cliPrintVarRange(val);
+        }
     } else {
         // no equals, check for matching variables.
         cliGet(cmdline);
@@ -5301,6 +5319,8 @@ static void printConfig(char *cmdline, bool doDiff)
             }
         }
 
+        cliPrintLinef("# name %s", strlen(pilotConfig()->name) == 0 ? emptyName : pilotConfig()->name);
+
 #if defined(USE_BOARD_INFO)
         cliPrintLinefeed();
         cliBoardName("");
@@ -5312,11 +5332,6 @@ static void printConfig(char *cmdline, bool doDiff)
 #if defined(USE_SIGNATURE)
             cliSignature("");
 #endif
-        }
-
-        if (!(dumpMask & HARDWARE_ONLY)) {
-            cliPrintHashLine("name");
-            printName(dumpMask, &pilotConfig_Copy);
         }
 
 #ifdef USE_RESOURCE_MGMT
@@ -5406,11 +5421,6 @@ static void printConfig(char *cmdline, bool doDiff)
 
             cliPrintHashLine("rxfail");
             printRxFailsafe(dumpMask, rxFailsafeChannelConfigs_CopyArray, rxFailsafeChannelConfigs(0));
-
-#ifdef USE_OSD
-            cliPrintHashLine("display_name");
-            printDisplayName(dumpMask, &pilotConfig_Copy);
-#endif
         }
 
         cliPrintHashLine("master");
@@ -5571,9 +5581,6 @@ const clicmd_t cmdTable[] = {
 #endif
     CLI_COMMAND_DEF("defaults", "reset to defaults and reboot", "[nosave]", cliDefaults),
     CLI_COMMAND_DEF("diff", "list configuration changes from default", "[master|profile|rates|hardware|all] {defaults|bare}", cliDiff),
-#ifdef USE_OSD
-    CLI_COMMAND_DEF("display_name", "display name of craft", NULL, cliDisplayName),
-#endif
 #ifdef USE_RESOURCE_MGMT
 #ifdef USE_DMA_SPEC
     CLI_COMMAND_DEF("dma", "show/set DMA assignments", "<> | <device> <index> list | <device> <index> [<option>|none] | list | show", cliDma),
