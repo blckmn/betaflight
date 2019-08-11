@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include "pg/pg.h"
 
+#define MAX_SETTING_NAME_LENGTH 50
 
 typedef enum {
     TABLE_OFF_ON = 0,
@@ -222,12 +223,19 @@ typedef struct clivalue_s {
     uint16_t offset;
 } __attribute__((packed)) clivalue_t;
 
+typedef struct cliprefix_s {
+    const char *name;
+    pgn_t pgn;
+} cliprefix_t;
 
-extern const lookupTableEntry_t lookupTables[];
-extern const uint16_t valueTableEntryCount;
-
-extern const clivalue_t valueTable[];
 //extern const uint8_t lookupTablesEntryCount;
+extern const lookupTableEntry_t lookupTables[];
+
+extern const uint16_t valueTableEntryCount;
+extern const clivalue_t valueTable[];
+
+extern const uint16_t prefixTableEntryCount;
+extern const cliprefix_t prefixTable[];
 
 extern const char * const lookupTableGyroHardware[];
 

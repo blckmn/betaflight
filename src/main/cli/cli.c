@@ -463,6 +463,19 @@ static void getMinMax(const clivalue_t *var, int *min, int *max)
     }
 }
 
+static char* getValueName(const clivalue_t *value, char* buffer)
+{
+    for (uint32_t i = 0; i < prefixTableEntryCount; i++) {
+        if (value->pgn == prefixTable[i].pgn) {
+            tfp_sprintf(buffer, "%s_%s", prefixTable[i].name, value->name);
+            return buffer;
+        }
+    }
+
+    tfp_sprintf(buffer, "%s", value->name);
+    return buffer;
+}
+
 static void printValuePointer(const clivalue_t *var, const void *valuePointer, bool full)
 {
     if ((var->type & VALUE_MODE_MASK) == MODE_ARRAY) {
@@ -569,11 +582,12 @@ static void printValuePointer(const clivalue_t *var, const void *valuePointer, b
 
         if (valueIsCorrupted) {
             cliPrintLinefeed();
-            cliPrintError("CORRUPTED CONFIG: %s = %d", var->name, value);
+
+            char name[MAX_SETTING_NAME_LENGTH];            
+            cliPrintError("CORRUPTED CONFIG: %s = %d", getValueName(var, name), value);
         }
     }
 }
-
 
 static bool valuePtrEqualsDefault(const clivalue_t *var, const void *ptr, const void *ptrDefault)
 {
@@ -632,7 +646,6 @@ static uint8_t getRateProfileIndexToUse()
     return rateProfileIndexToUse == CURRENT_PROFILE_INDEX ? getCurrentControlRateProfileIndex() : rateProfileIndexToUse;
 }
 
-
 static uint16_t getValueOffset(const clivalue_t *value)
 {
     switch (value->type & VALUE_SECTION_MASK) {
@@ -666,9 +679,12 @@ const void *cliGetDefaultPointer(const clivalue_t *value)
 static const char *dumpPgValue(const clivalue_t *value, dumpFlags_t dumpMask, const char *headingStr)
 {
     const pgRegistry_t *pg = pgFind(value->pgn);
+
+    char name[MAX_SETTING_NAME_LENGTH];
+    getValueName(value, name);
 #ifdef DEBUG
     if (!pg) {
-        cliPrintLinef("VALUE %s ERROR", value->name);
+        cliPrintLinef("VALUE %s ERROR", name);
         return headingStr; // if it's not found, the pgn shouldn't be in the value table!
     }
 #endif
@@ -681,11 +697,11 @@ static const char *dumpPgValue(const clivalue_t *value, dumpFlags_t dumpMask, co
     headingStr = cliPrintSectionHeading(dumpMask, !equalsDefault, headingStr);
     if (((dumpMask & DO_DIFF) == 0) || !equalsDefault) {
         if (dumpMask & SHOW_DEFAULTS && !equalsDefault) {
-            cliPrintf(defaultFormat, value->name);
+            cliPrintf(defaultFormat, name);
             printValuePointer(value, (uint8_t*)pg->address + valueOffset, false);
             cliPrintLinefeed();
         }
-        cliPrintf(format, value->name);
+        cliPrintf(format, name);
         printValuePointer(value, pg->copy + valueOffset, false);
         cliPrintLinefeed();
     }
@@ -4141,7 +4157,8 @@ void cliPrintVarDefault(const clivalue_t *value)
         const int valueOffset = getValueOffset(value);
         const bool equalsDefault = valuePtrEqualsDefault(value, pg->copy + valueOffset, pg->address + valueOffset);
         if (!equalsDefault) {
-            cliPrintf(defaultFormat, value->name);
+            char name[MAX_SETTING_NAME_LENGTH];
+            cliPrintf(defaultFormat, getValueName(value, name));
             printValuePointer(value, (uint8_t*)pg->address + valueOffset, false);
             cliPrintLinefeed();
         }
@@ -4158,13 +4175,18 @@ STATIC_UNIT_TESTED void cliGet(char *cmdline)
 
     backupAndResetConfigs();
 
+    char name[MAX_SETTING_NAME_LENGTH];
+
     for (uint32_t i = 0; i < valueTableEntryCount; i++) {
-        if (strcasestr(valueTable[i].name, cmdline)) {
+
+        getValueName(&valueTable[i], name);
+
+        if (strcasestr(name, cmdline)) {
             val = &valueTable[i];
             if (matchedCommands > 0) {
                 cliPrintLinefeed();
             }
-            cliPrintf("%s = ", valueTable[i].name);
+            cliPrintf("%s = ", name);
             cliPrintVar(val, 0);
             cliPrintLinefeed();
             switch (val->type & VALUE_SECTION_MASK) {
@@ -4210,8 +4232,9 @@ static uint8_t getWordLength(char *bufBegin, char *bufEnd)
 
 uint16_t cliGetSettingIndex(char *name, uint8_t length)
 {
+    char settingName[MAX_SETTING_NAME_LENGTH];
     for (uint32_t i = 0; i < valueTableEntryCount; i++) {
-        const char *settingName = valueTable[i].name;
+        getValueName(&valueTable[i], settingName);
 
         // ensure exact match when setting to prevent setting variables with shorter names
         if (strncasecmp(name, settingName, strlen(settingName)) == 0 && length == strlen(settingName)) {
@@ -4225,13 +4248,14 @@ STATIC_UNIT_TESTED void cliSet(char *cmdline)
 {
     const uint32_t len = strlen(cmdline);
     char *eqptr;
+    char name[MAX_SETTING_NAME_LENGTH];
 
     if (len == 0 || (len == 1 && cmdline[0] == '*')) {
         cliPrintLine("Current settings: ");
 
         for (uint32_t i = 0; i < valueTableEntryCount; i++) {
             const clivalue_t *val = &valueTable[i];
-            cliPrintf("%s = ", valueTable[i].name);
+            cliPrintf("%s = ", getValueName(val, name));
             cliPrintVar(val, len); // when len is 1 (when * is passed as argument), it will print min/max values as well, for gui
             cliPrintLinefeed();
         }
@@ -4398,7 +4422,7 @@ STATIC_UNIT_TESTED void cliSet(char *cmdline)
         }
 
         if (valueChanged) {
-            cliPrintf("%s set to ", val->name);
+            cliPrintf("%s set to ", getValueName(val, name));
             cliPrintVar(val, 0);
         } else {
             cliPrintErrorLinef("INVALID VALUE");
