@@ -1,0 +1,13 @@
+
+name: Build
+
+on:
+  push:
+    branches: [release_artifacts]
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_build: false
