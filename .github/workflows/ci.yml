@@ -20,13 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - run: make arm_sdk_install
+      - name: Prepare environment
+        run: make arm_sdk_install
 
-      - run: make all
-        if: ${{ !inputs.release_build }}
-
-      - run: make all RELEASE=yes
-        if: ${{ inputs.release_build }}
+      - name: Execute Build
+        run: make RELEASE=${{ inputs.release_build == 'true' && 'yes' || 'no' }}
 
       - name: Publish build artifacts
         uses: actions/upload-artifact@v3
