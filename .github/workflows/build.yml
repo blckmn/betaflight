@@ -19,18 +19,17 @@ jobs:
     steps:
       - name: Fetch build artifacts
         uses: actions/download-artifact@v2
-        with:
-          path: release-assets/
 
-      - run: ls -al release-assets/Betaflight-Debug
+      - run: ls -al Assets
 
       - run: |
           set -x
           assets=()
-          for asset in release-assets/Betaflight-Debug/*.hex; do
+          for asset in Assets/*.hex; do
             assets+=("-a" "$asset")
+            echo "$asset"
           done
           tag_name="${GITHUB_REF##*/}"
-          echo 'hub release edit "${assets[@]}" "$tag_name"'
+          echo hub release edit "${assets[@]}" "$tag_name"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -23,7 +23,21 @@ jobs:
     needs: ci
     runs-on: ubuntu-20.04
     steps:
+      - name: Get release
+        id: get_release
+        uses: blckmn/get-release@v1.2.3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Fetch build artifacts
         uses: actions/download-artifact@v2
         with:
           path: release-assets/
+
+      - name: Upload release binaries
+        uses: actions/upload-release-asset@v1.0.2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.get_release.outputs.upload_url }}
+          asset_path: release-assets/

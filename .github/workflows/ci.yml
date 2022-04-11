@@ -29,6 +29,6 @@ jobs:
       - name: Publish build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Betaflight${{ inputs.release_build == 'true' && '' || '-Debug' }}
+          name: Assets
           path: ./obj/*.hex
           retention-days: 7
