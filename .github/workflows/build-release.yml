@@ -1,15 +1,8 @@
-
 name: Release
 
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to utilise'
-        required: false
-        type: string
         
 jobs:
   ci:
@@ -23,21 +16,19 @@ jobs:
     needs: ci
     runs-on: ubuntu-20.04
     steps:
-      - name: Get release
-        id: get_release
-        uses: blckmn/get-release@v1.2.3
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
       - name: Fetch build artifacts
         uses: actions/download-artifact@v2
-        with:
-          path: release-assets/
 
-      - name: Upload release binaries
-        uses: actions/upload-release-asset@v1.0.2
+      - run: ls -al Assets
+
+      - run: |
+          set -x
+          assets=()
+          for asset in Assets/*.hex; do
+            assets+=("-a" "$asset")
+            echo "$asset"
+          done
+          tag_name="${GITHUB_REF##*/}"
+          hub release edit "${assets[@]}" "$tag_name"
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.get_release.outputs.upload_url }}
-          asset_path: release-assets/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

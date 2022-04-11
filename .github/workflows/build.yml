@@ -11,25 +11,3 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       release_build: false
-
-  release:
-    name: Release
-    needs: ci
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Fetch build artifacts
-        uses: actions/download-artifact@v2
-
-      - run: ls -al Assets
-
-      - run: |
-          set -x
-          assets=()
-          for asset in Assets/*.hex; do
-            assets+=("-a" "$asset")
-            echo "$asset"
-          done
-          tag_name="${GITHUB_REF##*/}"
-          echo hub release edit "${assets[@]}" "$tag_name"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
