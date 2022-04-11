@@ -22,4 +22,15 @@ jobs:
         with:
           path: release-assets/
 
-      - run: ls -al release-assets
+      - run: ls -al release-assets/Betaflight-Debug
+
+      - run: |
+          set -x
+          assets=()
+          for asset in release-assets/Betaflight-Debug/*.hex; do
+            assets+=("-a" "$asset")
+          done
+          tag_name="${GITHUB_REF##*/}"
+          echo 'hub release edit "${assets[@]}" "$tag_name"'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
